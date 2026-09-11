@@ -1,4 +1,4 @@
-// pvsbench - times pvsutil's natives against tracelines
+// pvsbench - times pvsutil's natives against tracelines and ReAPI
 //
 //     pvs_bench [iterations]   default 100000
 
@@ -6,6 +6,7 @@
 #include <amxmisc>
 #include <fakemeta>
 #include <pvsutil>
+#include <reapi>
 
 #define VERSION             "1.0.0"
 
@@ -171,6 +172,52 @@ static BenchPlayersAt(Float:vecEye[3], iIterations)
 
 // one viewer checked against every target.
 
+// ReAPI's equivalent of fatset_visible_at, minus the restore: builds a set
+// and tests one entity on every call.
+static BenchReapi(Float:vecEye[3], iIterations)
+{
+	new t, iStart = tickcount()
+
+	for (new n = 0; n < iIterations; n++)
+	{
+		CheckVisibilityInOrigin(g_iTargets[t], vecEye, VisibilityInPVS)
+
+		if (++t == g_iTargetCount)
+			t = 0
+	}
+
+	return tickcount() - iStart
+}
+
+// One sweep = a set at your eye and every target tested against it. ReAPI
+// cannot keep a set, so it builds one per target.
+
+static BenchSweepUtil(Float:vecEye[3], iSweeps)
+{
+	new iStart = tickcount()
+
+	for (new s = 0; s < iSweeps; s++)
+	{
+		fatset_pvs(vecEye)
+		fatset_players()
+	}
+
+	return tickcount() - iStart
+}
+
+static BenchSweepReapi(Float:vecEye[3], iSweeps)
+{
+	new iStart = tickcount()
+
+	for (new s = 0; s < iSweeps; s++)
+	{
+		for (new t = 0; t < g_iTargetCount; t++)
+			CheckVisibilityInOrigin(g_iTargets[t], vecEye, VisibilityInPVS)
+	}
+
+	return tickcount() - iStart
+}
+
 static BenchTraceAll(id, Float:vecEye[3], iPasses)
 {
 	new iStart = tickcount()
@@ -281,6 +328,7 @@ public CmdBench(id, iLevel, iCid)
 	new iPlayers   = BenchPlayers(vecEye, iIterations)
 	new iVisibleAt = BenchVisibleAt(vecEye, iIterations)
 	new iPlayersAt = BenchPlayersAt(vecEye, iIterations)
+	new iReapi     = BenchReapi(vecEye, iIterations)
 
 	Report(id, "native call (baseline)", iBaseline, iIterations)
 	Report(id, "traceline", iTrace, iIterations)
@@ -290,6 +338,7 @@ public CmdBench(id, iLevel, iCid)
 	Report(id, "fatset_players", iPlayers, iIterations)
 	Report(id, "fatset_visible_at", iVisibleAt, iIterations)
 	Report(id, "fatset_players_at", iPlayersAt, iIterations)
+	Report(id, "CheckVisibilityInOrigin", iReapi, iIterations)
 
 	console_print(id, "[pvsbench] ----------------------------------------------------")
 
@@ -310,6 +359,15 @@ public CmdBench(id, iLevel, iCid)
 	new iSaved = g_iTargetCount - iInPvs
 
 	console_print(id, "[pvsbench] %-24s %5d of %d per pass, %d total", "traces saved", iSaved, g_iTargetCount, iSaved * iPasses)
+
+	new iSweepUtil  = BenchSweepUtil(vecEye, iPasses)
+	new iSweepReapi = BenchSweepReapi(vecEye, iPasses)
+
+	console_print(id, "[pvsbench] ---- one sweep = your PVS against all %d targets, %d sweeps ----", g_iTargetCount, iPasses)
+
+	Report(id, "fatset_pvs + players", iSweepUtil, iPasses, "sweep")
+	Report(id, "reapi, one per target", iSweepReapi, iPasses, "sweep")
+	Ratio(id, "reapi/pvsutil", iSweepReapi, iSweepUtil)
 
 	return PLUGIN_HANDLED
 }

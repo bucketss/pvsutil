@@ -22,6 +22,12 @@ this allows cheap lookups for coarse visual culling vs. more expensive traceline
 | `fatset_visible_at` | PVS        | one entity  | yes                     |
 | `fatset_players_at` | PVS        | all players | yes                     |
 
+`fatset_pvs` builds visible set and marks it current, overwriting the engine's—fastest way to get pvs.
+
+`fatset_pas` is the same as above but for the audible set, safe everywhere.
+
+`fatset_visible` tests an entity against whatever the _pas or _pvs builder set to current, returns 1 if no set is current.
+
 `fatset_players` returns a bitmask of player slots, bit 0 = player 1:
 
     fatset_pas(fSrc)
@@ -31,6 +37,10 @@ this allows cheap lookups for coarse visual culling vs. more expensive traceline
         if (iHeard & (1 << (i - 1)))
             // ...
     }
+
+`fatset_visible_at` gets PVS at an origin, restores engine's set before returning, safe to use in AddToFullPack.
+
+`fatset_players_at` is the player sweep, but scoped the same as above, safe for AddToFullPack.
 
 the `_at` natives build, test and restore in one call, they exist for `AddToFullPack`, and cost an extra BSP travel vs. their counterparts (and leave no set current).
 
