@@ -50,6 +50,66 @@ the `_at` natives put it back by rebuilding from the origin `SetupVisibility` us
 
 PAS isn't read in that loop, so `fatset_pas` is safe.
 
+## How it works
+
+state:
+
+    current_set      = null     // the set the testers read
+    current_set_time = -1       // game time it was built
+    engine_origin    = none     // origin SetupVisibility last built its PVS at
+
+builders:
+
+    fatset_pvs(origin):
+        current_set      = engine.SetFatPVS(origin)    // overwrites the engine's PVS buffer
+        current_set_time = now
+        return current_set != null
+
+    fatset_pas(origin):
+        same, with engine.SetFatPAS
+
+testers:
+
+    fatset_visible(ent):
+        if current_set is null or current_set_time != now:
+            return true                                // no usable set: fail open
+        if ent is invalid or free:
+            log error; return true                     // bad index: fail open
+        return engine.CheckVisibility(ent, current_set)
+
+    fatset_players():
+        set = current set if still usable, else null
+        mask = 0
+        for slot in 1..maxplayers:
+            if slot is occupied and (set is null or CheckVisibility(slot, set)):
+                mask |= bit(slot)                      // null set means every slot is set
+        return mask
+
+scoped pair:
+
+    fatset_visible_at(ent, origin):
+        if ent is invalid: log error; return true
+        set    = engine.SetFatPVS(origin)              // borrow the engine's buffer
+        result = CheckVisibility(ent, set)
+        engine.SetFatPVS(engine_origin)                // rebuild what SetupVisibility had
+        current_set = null                             // leave nothing current
+        return result
+
+    fatset_players_at(origin):
+        same, but the test is the fatset_players loop
+
+hooks:
+
+    on engine SetFatPVS/SetFatPAS (anyone calls it):
+        current_set = null                             // our pointer may be stale now
+        if the call didn't come from us:
+            engine_origin = origin                     // remember it for restores
+
+    on map start:
+        current_set = null; engine_origin = none
+
+building a PVS depends only on the origin and the map, so replaying `engine_origin` rebuilds the exact buffer `SetupVisibility` made. a guard flag around the module's own builds keeps them from overwriting `engine_origin`.
+
 ## Building
 
 Windows (MSVC):
